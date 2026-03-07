@@ -461,7 +461,7 @@ export default function App() {
     useEffect(() => {
         if (timerRef.current) clearInterval(timerRef.current)
         const g = gs
-        if (g.timeW == null || g.status !== 'playing') {
+        if (g.timeW == null || (g.status !== 'playing' && g.status !== 'check')) {
             setDispTimeW(g.timeW)
             setDispTimeB(g.timeB)
             return
@@ -469,7 +469,7 @@ export default function App() {
         // Compute elapsed since last move
         const tick = () => {
             const cur = gsRef.current
-            if (!cur || cur.status !== 'playing' || cur.timeW == null) return
+            if (!cur || (cur.status !== 'playing' && cur.status !== 'check') || cur.timeW == null) return
             const now = getNow()
             const elapsed = cur.lastMoveTs ? (now - cur.lastMoveTs) / 1000 : 0
 
@@ -504,7 +504,7 @@ export default function App() {
     // ── Timeout handler ───────────────────────────────────────────────────
     const handleTimeout = useCallback((losingColor) => {
         const cur = gsRef.current
-        if (!cur || cur.status !== 'playing') return
+        if (!cur || (cur.status !== 'playing' && cur.status !== 'check')) return
         const winner = losingColor === 'w' ? 'b' : 'w'
         const newSeq = (cur.seq || 0) + 1
         seqRef.current = newSeq
@@ -1072,7 +1072,7 @@ export default function App() {
                     {gs.captured[myColor === 'w' ? 'b' : 'w'].slice(0, 12).map((p, i) => <span key={i}>{GLYPHS[p]}</span>)}
                 </div>
             </div>
-            {!isMyTurn && gs.status === 'playing' && (
+            {!isMyTurn && (gs.status === 'playing' || gs.status === 'check') && (
                 <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#81b64c', marginLeft: 'auto', flexShrink: 0 }} />
             )}
         </div>
@@ -1089,7 +1089,7 @@ export default function App() {
                     {gs.captured[myColor].slice(0, 12).map((p, i) => <span key={i}>{GLYPHS[p]}</span>)}
                 </div>
             </div>
-            {isMyTurn && gs.status === 'playing' && (
+            {isMyTurn && (gs.status === 'playing' || gs.status === 'check') && (
                 <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#81b64c', marginLeft: 'auto', flexShrink: 0 }} />
             )}
         </div>
@@ -1099,7 +1099,7 @@ export default function App() {
         const isOpp = who === 'opp'
         const noTC = gs.timeControl == null
         const time = noTC ? null : (isOpp ? (oppColor === 'w' ? dispTimeW : dispTimeB) : (myColor === 'w' ? dispTimeW : dispTimeB))
-        const active = !noTC && (isOpp ? (!isMyTurn && gs.status === 'playing') : (isMyTurn && gs.status === 'playing'))
+        const active = !noTC && (isOpp ? (!isMyTurn && (gs.status === 'playing' || gs.status === 'check')) : (isMyTurn && (gs.status === 'playing' || gs.status === 'check')))
         const low = time != null && time <= 10
         return (
             <div
@@ -1327,19 +1327,19 @@ export default function App() {
 
             {/* ── MOBILE: Opponent info bar (top) ─────────────────────────── */}
             <div className="mobile-top-bar" style={{
-                borderLeft: !isMyTurn && gs.status === 'playing' ? '3px solid #81b64c' : '3px solid transparent'
+                borderLeft: !isMyTurn && (gs.status === 'playing' || gs.status === 'check') ? '3px solid #81b64c' : '3px solid transparent'
             }}>
                 {renderOppBar()}
             </div>
 
             {/* ── MOBILE: Opponent clock (directly above board) ─────────────── */}
             <div className="mobile-clock-bar" style={{
-                borderLeft: !isMyTurn && gs.status === 'playing' ? '3px solid #81b64c' : '3px solid transparent'
+                borderLeft: !isMyTurn && (gs.status === 'playing' || gs.status === 'check') ? '3px solid #81b64c' : '3px solid transparent'
             }}>
                 <div className="mob-clock">
                     {(() => {
                         const oppTime = oppColor === 'w' ? dispTimeW : dispTimeB
-                        const oppActive = !isMyTurn && gs.status === 'playing'
+                        const oppActive = !isMyTurn && (gs.status === 'playing' || gs.status === 'check')
                         const oppLow = oppTime != null && oppTime <= 10
                         const noTC = gs.timeControl == null
                         return (
@@ -1373,7 +1373,7 @@ export default function App() {
                     {/* Opponent clock */}
                     {gs.timeControl != null && (() => {
                         const oppTime = oppColor === 'w' ? dispTimeW : dispTimeB
-                        const oppActive = !isMyTurn && gs.status === 'playing'
+                        const oppActive = !isMyTurn && (gs.status === 'playing' || gs.status === 'check')
                         const oppLow = oppTime != null && oppTime <= 10
                         return (
                             <div className={`clock${oppActive ? ' active' : ''}${oppActive && oppLow ? ' low' : ''}`}>
@@ -1384,7 +1384,7 @@ export default function App() {
                     })()}
 
                     {/* Opponent card */}
-                    <div style={{ padding: '10px 12px', background: '#1a1715', border: '1px solid #302c29', borderLeft: !isMyTurn && gs.status === 'playing' ? '3px solid #81b64c' : '3px solid transparent', borderRadius: 8 }}>
+                    <div style={{ padding: '10px 12px', background: '#1a1715', border: '1px solid #302c29', borderLeft: !isMyTurn && (gs.status === 'playing' || gs.status === 'check') ? '3px solid #81b64c' : '3px solid transparent', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
                             <div style={{ width: 24, height: 24, borderRadius: '50%', background: oppColor === 'w' ? '#e8e0d5' : '#1a1715', border: '2px solid #4a4541', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 <span style={{ fontSize: 12 }}>{oppColor === 'w' ? '♚' : '♟'}</span>
@@ -1392,7 +1392,7 @@ export default function App() {
                             <span style={{ color: '#b0a89e', fontSize: 12, fontWeight: 600 }}>
                                 {oppColor === 'w' ? 'White' : 'Black'} (Opponent)
                             </span>
-                            {!isMyTurn && gs.status === 'playing' && (
+                            {!isMyTurn && (gs.status === 'playing' || gs.status === 'check') && (
                                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#81b64c', marginLeft: 'auto', flexShrink: 0 }} />
                             )}
                         </div>
@@ -1439,7 +1439,7 @@ export default function App() {
                     <button className="btn-ghost" onClick={leaveGame}>← Leave Game</button>
 
                     {/* Me card */}
-                    <div style={{ padding: '10px 12px', background: '#1a1715', border: '1px solid #302c29', borderLeft: isMyTurn && gs.status === 'playing' ? '3px solid #81b64c' : '3px solid transparent', borderRadius: 8 }}>
+                    <div style={{ padding: '10px 12px', background: '#1a1715', border: '1px solid #302c29', borderLeft: isMyTurn && (gs.status === 'playing' || gs.status === 'check') ? '3px solid #81b64c' : '3px solid transparent', borderRadius: 8 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
                             <div style={{ width: 24, height: 24, borderRadius: '50%', background: myColor === 'w' ? '#e8e0d5' : '#1a1715', border: '2px solid #4a4541', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                 <span style={{ fontSize: 12 }}>{myColor === 'w' ? '♙' : '♟'}</span>
@@ -1447,7 +1447,7 @@ export default function App() {
                             <span style={{ color: '#81b64c', fontSize: 12, fontWeight: 600 }}>
                                 {myColor === 'w' ? 'White' : 'Black'} (You)
                             </span>
-                            {isMyTurn && gs.status === 'playing' && (
+                            {isMyTurn && (gs.status === 'playing' || gs.status === 'check') && (
                                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#81b64c', marginLeft: 'auto', flexShrink: 0 }} />
                             )}
                         </div>
@@ -1459,7 +1459,7 @@ export default function App() {
                     {/* My clock */}
                     {gs.timeControl != null && (() => {
                         const myTime = myColor === 'w' ? dispTimeW : dispTimeB
-                        const myActive = isMyTurn && gs.status === 'playing'
+                        const myActive = isMyTurn && (gs.status === 'playing' || gs.status === 'check')
                         const myLow = myTime != null && myTime <= 10
                         return (
                             <div className={`clock${myActive ? ' active' : ''}${myActive && myLow ? ' low' : ''}`}>
@@ -1570,12 +1570,12 @@ export default function App() {
 
                 {/* ── MOBILE: My clock (directly below board) ────────────────── */}
                 <div className="mobile-clock-bar" style={{
-                    borderLeft: isMyTurn && gs.status === 'playing' ? '3px solid #81b64c' : '3px solid transparent'
+                    borderLeft: isMyTurn && (gs.status === 'playing' || gs.status === 'check') ? '3px solid #81b64c' : '3px solid transparent'
                 }}>
                     <div className="mob-clock">
                         {(() => {
                             const myTime = myColor === 'w' ? dispTimeW : dispTimeB
-                            const myActive = isMyTurn && gs.status === 'playing'
+                            const myActive = isMyTurn && (gs.status === 'playing' || gs.status === 'check')
                             const myLow = myTime != null && myTime <= 10
                             const noTC = gs.timeControl == null
                             return (
@@ -1593,7 +1593,7 @@ export default function App() {
 
                 {/* ── MOBILE: My info bar (bottom) ───────────────────────────────── */}
                 <div className="mobile-bottom-bar" style={{
-                    borderLeft: isMyTurn && gs.status === 'playing' ? '3px solid #81b64c' : '3px solid transparent'
+                    borderLeft: isMyTurn && (gs.status === 'playing' || gs.status === 'check') ? '3px solid #81b64c' : '3px solid transparent'
                 }}>
                     {renderMeBar()}
                 </div>
@@ -1744,7 +1744,7 @@ export default function App() {
                     if (isOutgoing) return <span style={{ color: '#6b6560', fontSize: 12, fontWeight: 500 }}>⏳ Waiting…</span>
                     return <button onClick={requestRematch} style={{ flex: 1, padding: '10px 0', background: '#81b64c', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>↺ Rematch</button>
                 })()}
-                <button className="btn-ghost" style={{ flex: gs.status === 'playing' ? '1' : '0 0 auto', padding: '10px 14px', marginBottom: 0 }} onClick={leaveGame}>← Leave</button>
+                <button className="btn-ghost" style={{ flex: (gs.status === 'playing' || gs.status === 'check') ? '1' : '0 0 auto', padding: '10px 14px', marginBottom: 0 }} onClick={leaveGame}>← Leave</button>
             </div>
         </div>
     )
