@@ -1508,7 +1508,7 @@ export default function App() {
                                 const isCheckKing = gs.status === 'check' && piece && piece === gs.turn + 'K'
                                 const isDragging = dragGhost && isSel
                                 // chess.com board colors
-                                let bg = light ? '#eedad1' : '#b58863'
+                                let bg = light ? '#F4E4B5' : '#27694D'
                                 if (isSel) bg = light ? '#f6f669' : '#caca3a'
                                 else if (isLast) bg = light ? '#cdd16a' : '#aaa23a'
                                 if (isCheckKing) bg = '#e84040'
