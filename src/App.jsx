@@ -400,6 +400,9 @@ const divS = { height: 1, background: '#302c29', margin: '18px 0' }
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
+let serverOffset = 0
+const getNow = () => Date.now() + serverOffset
+
 export default function App() {
     // Screens: 'lobby' | 'color-pick' | 'waiting' | 'game'
     const [screen, setScreen] = useState('lobby')
@@ -446,6 +449,14 @@ export default function App() {
     // Keep gsRef always fresh for use inside timer interval
     useEffect(() => { gsRef.current = gs }, [gs])
 
+    useEffect(() => {
+        const offsetRef = ref(db, '.info/serverTimeOffset')
+        const unsub = onValue(offsetRef, snap => {
+            serverOffset = snap.val() || 0
+        })
+        return () => unsub()
+    }, [])
+
     // ── Client-side countdown timer ───────────────────────────────────────
     useEffect(() => {
         if (timerRef.current) clearInterval(timerRef.current)
@@ -459,17 +470,25 @@ export default function App() {
         const tick = () => {
             const cur = gsRef.current
             if (!cur || cur.status !== 'playing' || cur.timeW == null) return
-            const now = Date.now()
+            const now = getNow()
             const elapsed = cur.lastMoveTs ? (now - cur.lastMoveTs) / 1000 : 0
-            let tw = cur.timeW, tb = cur.timeB
-            if (cur.turn === 'w') tw = Math.max(0, cur.timeW - elapsed)
-            else tb = Math.max(0, cur.timeB - elapsed)
+
+            const twActual = cur.turn === 'w' ? cur.timeW - elapsed : cur.timeW
+            const tbActual = cur.turn === 'b' ? cur.timeB - elapsed : cur.timeB
+
+            const tw = Math.max(0, twActual)
+            const tb = Math.max(0, tbActual)
+
             setDispTimeW(tw)
             setDispTimeB(tb)
-            // Timeout check — only the active player's client fires this
-            if (myColorRef.current === cur.turn) {
-                if (cur.turn === 'w' && tw <= 0) handleTimeout('w')
-                else if (cur.turn === 'b' && tb <= 0) handleTimeout('b')
+
+            // Timeout check
+            if (cur.turn === 'w') {
+                if (myColorRef.current === 'w' && twActual <= 0) handleTimeout('w')
+                else if (myColorRef.current === 'b' && twActual <= -3) handleTimeout('w')
+            } else {
+                if (myColorRef.current === 'b' && tbActual <= 0) handleTimeout('b')
+                else if (myColorRef.current === 'w' && tbActual <= -3) handleTimeout('b')
             }
         }
         tick()
@@ -585,7 +604,7 @@ export default function App() {
         await push(ref(db, 'rooms/' + roomRef.current + '/chat'), {
             color: chatMyColorRef.current,
             text,
-            ts: Date.now(),
+            ts: getNow(),
         })
     }, [chatInput])
 
@@ -661,7 +680,7 @@ export default function App() {
         const newSeq = (currentGs.seq || 0) + 1
         seqRef.current = newSeq
         // ── Time accounting ──────────────────────────────────────────────
-        const now = Date.now()
+        const now = getNow()
         let newTimeW = currentGs.timeW, newTimeB = currentGs.timeB
         if (currentGs.timeW != null && currentGs.lastMoveTs) {
             const elapsed = (now - currentGs.lastMoveTs) / 1000
