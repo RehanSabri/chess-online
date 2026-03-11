@@ -459,19 +459,12 @@ export default function GameScreen({
 
                 {/* ── BOARD ──────────────────────────────────────────────────────── */}
                 <div className="game-board-col">
-                    {/* File labels top */}
-                    <div style={{ display: 'flex', paddingLeft: 22, width: `calc(8 * ${SQ} + 44px)` }}>
-                        {files.map(c => (
-                            <div key={c} style={{ flex: 1, textAlign: 'center', color: '#6b6560', fontSize: 10, fontWeight: 500, paddingBottom: 3 }}>
-                                {fnames[c]}
-                            </div>
-                        ))}
-                    </div>
                     <div style={{ display: 'flex' }}>
+
                         {/* Rank labels left */}
-                        <div style={{ display: 'flex', flexDirection: 'column', width: 22, height: `calc(8 * ${SQ})`, justifyContent: 'space-around' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', width: 16, height: `calc(8 * ${SQ})`, justifyContent: 'space-around' }}>
                             {ranks.map(r => (
-                                <div key={r} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b6560', fontSize: 10, fontWeight: 500 }}>
+                                <div key={r} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', color: '#6b6560', fontSize: 10, fontWeight: 500 }}>
                                     {8 - r}
                                 </div>
                             ))}
@@ -536,17 +529,9 @@ export default function GameScreen({
                             }))}
                         </div>
 
-                        {/* Rank labels right */}
-                        <div style={{ display: 'flex', flexDirection: 'column', width: 22, height: `calc(8 * ${SQ})`, justifyContent: 'space-around' }}>
-                            {ranks.map(r => (
-                                <div key={r} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b6560', fontSize: 10, fontWeight: 500 }}>
-                                    {8 - r}
-                                </div>
-                            ))}
-                        </div>
                     </div>
                     {/* File labels bottom */}
-                    <div style={{ display: 'flex', paddingLeft: 22, width: `calc(8 * ${SQ} + 44px)` }}>
+                    <div style={{ display: 'flex', paddingLeft: 16, width: `calc(8 * ${SQ} + 16px)` }}>
                         {files.map(c => (
                             <div key={c} style={{ flex: 1, textAlign: 'center', color: '#6b6560', fontSize: 10, fontWeight: 500, paddingTop: 3 }}>
                                 {fnames[c]}

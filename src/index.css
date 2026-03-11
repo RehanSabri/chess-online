@@ -488,18 +488,18 @@ body {
     .game-right-panel {
         width: 100%;
         min-width: 0;
-        max-width: 520px;
+        max-width: 560px;
     }
 
     .game-board-col {
         width: 100%;
-        max-width: 520px;
+        max-width: 560px;
     }
 
     .mobile-top-bar {
         display: flex;
         width: 100%;
-        max-width: 520px;
+        max-width: 560px;
         align-items: center;
         justify-content: space-between;
         background: #1a1715;
@@ -513,7 +513,7 @@ body {
     .mobile-clock-bar {
         display: flex;
         width: 100%;
-        max-width: 520px;
+        max-width: 560px;
         align-items: center;
         justify-content: stretch;
         background: #111;
@@ -531,7 +531,7 @@ body {
     .mobile-bottom-bar {
         display: flex;
         width: 100%;
-        max-width: 520px;
+        max-width: 560px;
         align-items: center;
         justify-content: space-between;
         background: #1a1715;
@@ -550,7 +550,7 @@ body {
     .mobile-clocks-row {
         display: flex;
         width: 100%;
-        max-width: 520px;
+        max-width: 560px;
         gap: 6px;
     }
 
@@ -561,7 +561,7 @@ body {
     .mobile-status-bar {
         display: flex;
         width: 100%;
-        max-width: 520px;
+        max-width: 560px;
         align-items: center;
         justify-content: center;
         background: #1a1715;

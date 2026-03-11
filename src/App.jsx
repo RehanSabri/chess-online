@@ -581,8 +581,7 @@ export default function App() {
     const ranks = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
     const files = flipped ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7]
     const fnames = 'abcdefgh'
-    // On mobile (<= 700px), fill ~96vw across 8 squares. On desktop, cap at 66px or 12vw.
-    const SQ = 'min(66px, 12vw, calc((min(100vw, 520px) - 56px) / 8))'
+    const SQ = 'min(76px, 15vw, calc((min(100vw, 560px) - 30px) / 8))'
 
     const myRole = myColor === hostColorRef.current ? 'host' : 'guest'
     const theirRole = myRole === 'host' ? 'guest' : 'host'
