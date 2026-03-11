@@ -10,7 +10,7 @@ export default function GameScreen({
     activeTab, setActiveTab, chatUnread, setChatUnread,
     histRef, chatBottomRef,
     handleClick, handlePieceMouseDown, handlePromo,
-    requestRematch, acceptRematch, rejectRematch, leaveGame,
+    requestRematch, acceptRematch, rejectRematch, leaveGame, resignGame,
     offerDraw, acceptDraw, rejectDraw,
     sel, lm
 }) {
@@ -37,6 +37,11 @@ export default function GameScreen({
                     : { t: '⏰ Time\'s up — You lose!', c: '#e05c5c' }
             }
             return { t: `Checkmate — ${winLabel} wins!`, c: '#e05c5c' }
+        }
+        if (gs.status === 'resigned') {
+            return gs.winner === myColor
+                ? { t: 'Opponent resigned — You win!', c: '#81b64c' }
+                : { t: 'You resigned — Opponent wins!', c: '#e05c5c' }
         }
         if (gs.status === 'stalemate') return { t: 'Stalemate — Draw', c: '#9a9a7a' }
         if (gs.status === 'draw_agreement') return { t: 'Draw by Agreement', c: '#9a9a7a' }
@@ -102,7 +107,7 @@ export default function GameScreen({
                         </p>
                         <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
                             <button
-                                onClick={() => { setShowResignWarning(false); leaveGame(); }}
+                                onClick={() => { setShowResignWarning(false); resignGame(); }}
                                 style={{
                                     flex: 1, padding: '12px 0',
                                     background: '#e05c5c', border: 'none', borderRadius: 8,
@@ -152,25 +157,29 @@ export default function GameScreen({
             )}
 
             {/* ── END-GAME RESULT OVERLAY ──────────────────────────────────── */}
-            {(gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement') && (() => {
-                const isTimeout = gs.timeW != null && (gs.timeW === 0 || gs.timeB === 0)
+            {(gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement' || gs.status === 'resigned') && (() => {
+                const isTimeout = gs.status === 'checkmate' && gs.timeW != null && (gs.timeW === 0 || gs.timeB === 0)
+                const isResigned = gs.status === 'resigned'
                 const isDraw = gs.status === 'stalemate' || gs.status === 'draw_agreement'
                 const iWon = !isDraw && gs.winner === myColor
 
-                let emoji, headline, subline, accentColor, glowColor
+                let topGraphic, headline, subline, accentColor, glowColor
                 if (isDraw) {
-                    emoji = '🤝'; headline = 'Draw!'; subline = gs.status === 'draw_agreement' ? 'By Agreement' : 'By Stalemate'
+                    topGraphic = <div style={{ fontSize: 64, lineHeight: 1, marginBottom: 16 }}>🤝</div>
+                    headline = 'Draw!'; subline = gs.status === 'draw_agreement' ? 'By Agreement' : 'By Stalemate'
                     accentColor = '#9a9a7a'; glowColor = 'rgba(154,154,122,.25)'
-                } else if (iWon) {
-                    emoji = isTimeout ? '⏰' : '🏆'
-                    headline = 'You Win!'
-                    subline = isTimeout ? 'Win on Time' : 'By Checkmate'
-                    accentColor = '#81b64c'; glowColor = 'rgba(129,182,76,.22)'
                 } else {
-                    emoji = isTimeout ? '⏰' : '💀'
-                    headline = 'You Lose!'
-                    subline = isTimeout ? 'Time ran out' : 'By Checkmate'
-                    accentColor = '#e05c5c'; glowColor = 'rgba(224,92,92,.22)'
+                    const winImgSrc = gs.winner === 'w' ? '/logo/white_win.png' : '/logo/black_win.png';
+                    topGraphic = <img src={winImgSrc} alt="Winner" style={{ width: 80, height: 80, objectFit: 'contain', marginBottom: 16 }} />
+                    if (iWon) {
+                        headline = 'You Win!'
+                        subline = isTimeout ? 'Win on Time' : isResigned ? 'By Resignation' : 'By Checkmate'
+                        accentColor = '#81b64c'; glowColor = 'rgba(129,182,76,.22)'
+                    } else {
+                        headline = 'You Lose!'
+                        subline = isTimeout ? 'Time ran out' : isResigned ? 'By Resignation' : 'By Checkmate'
+                        accentColor = '#e05c5c'; glowColor = 'rgba(224,92,92,.22)'
+                    }
                 }
 
                 return (
@@ -192,8 +201,8 @@ export default function GameScreen({
                             animation: 'resultpop .45s cubic-bezier(.34,1.56,.64,1) both',
                             fontFamily: "'Inter',sans-serif",
                         }}>
-                            {/* Big emoji */}
-                            <div style={{ fontSize: 64, lineHeight: 1, marginBottom: 16 }}>{emoji}</div>
+                            {/* Big emoji / Result image */}
+                            {topGraphic}
 
                             {/* Win/Lose/Draw headline */}
                             <h2 style={{
@@ -397,7 +406,7 @@ export default function GameScreen({
                     </div>
 
                     {/* Rematch — left panel (mirrors overlay logic) */}
-                    {(gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement') && (() => {
+                    {(gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement' || gs.status === 'resigned') && (() => {
                         const isIncoming = gs.rematchReq && gs.rematchReq === theirRole
                         const isOutgoing = gs.rematchReq && gs.rematchReq === myRole
                         if (isIncoming) return (
@@ -720,7 +729,7 @@ export default function GameScreen({
 
             {/* ── MOBILE: Leave / Rematch strip ─────────────────────────────── */}
             <div className="mobile-top-bar" style={{ justifyContent: 'center', gap: 8 }}>
-                {(gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement') && (() => {
+                {(gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement' || gs.status === 'resigned') && (() => {
                     const isIncoming = gs.rematchReq && gs.rematchReq === theirRole
                     const isOutgoing = gs.rematchReq && gs.rematchReq === myRole
                     if (isIncoming) return (

@@ -341,7 +341,7 @@ export default function App() {
     // ── Board click ───────────────────────────────────────────────────────────
     const handleClick = useCallback((row, col) => {
         if (
-            gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement' ||
+            gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement' || gs.status === 'resigned' ||
             promo || gs.turn !== myColorRef.current
         ) return
         // Ignore clicks that ended a drag
@@ -387,7 +387,7 @@ export default function App() {
     }, [])
 
     const handlePieceMouseDown = useCallback((e, row, col, piece) => {
-        if (gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement') return
+        if (gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement' || gs.status === 'resigned') return
         if (promo) return
         if (pc(piece) !== myColorRef.current) return
         if (gs.turn !== myColorRef.current) return
@@ -527,6 +527,29 @@ export default function App() {
         setGs(prev => ({ ...prev, drawOffer: null }))
     }
 
+    // ── Resign game ───────────────────────────────────────────────────────────
+    const resignGame = () => {
+        const cur = gsRef.current
+        if (cur && (cur.status === 'playing' || cur.status === 'check')) {
+            const losingColor = myColorRef.current
+            const winner = losingColor === 'w' ? 'b' : 'w'
+            const newSeq = (cur.seq || 0) + 1
+            seqRef.current = newSeq
+            const newState = {
+                ...cur,
+                status: 'resigned',
+                winner,
+                seq: newSeq,
+                lastMoveTs: null,
+            }
+            update(ref(db, 'rooms/' + roomRef.current), encodeGs(newState, {
+                hostColor: hostColorRef.current,
+                guestJoined: true,
+            })).catch(() => {})
+        }
+        leaveGame()
+    }
+
     // ── Leave game ────────────────────────────────────────────────────────────
     const leaveGame = () => {
         unsubscribe()
@@ -600,7 +623,7 @@ export default function App() {
             handleClick={handleClick} handlePieceMouseDown={handlePieceMouseDown} handlePromo={handlePromo}
             requestRematch={requestRematch} acceptRematch={acceptRematch} rejectRematch={rejectRematch}
             offerDraw={offerDraw} acceptDraw={acceptDraw} rejectDraw={rejectDraw}
-            leaveGame={leaveGame}
+            leaveGame={leaveGame} resignGame={resignGame}
             sel={sel} lm={lm}
         />
     )
