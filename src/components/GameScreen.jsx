@@ -461,15 +461,6 @@ export default function GameScreen({
                 <div className="game-board-col">
                     <div style={{ display: 'flex' }}>
 
-                        {/* Rank labels left */}
-                        <div style={{ display: 'flex', flexDirection: 'column', width: 16, height: `calc(8 * ${SQ})`, justifyContent: 'space-around' }}>
-                            {ranks.map(r => (
-                                <div key={r} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', color: '#6b6560', fontSize: 10, fontWeight: 500 }}>
-                                    {8 - r}
-                                </div>
-                            ))}
-                        </div>
-
                         {/* Board grid */}
                         <div
                             ref={boardRef}
@@ -500,6 +491,16 @@ export default function GameScreen({
                                         onClick={() => handleClick(row, col)}
                                         style={{ width: SQ, height: SQ, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: piece && pc(piece) === myColor && gs.turn === myColor ? 'grab' : 'pointer' }}
                                     >
+                                        {col === files[0] && (
+                                            <span className="board-coord" style={{ top: 2, left: 4, color: light ? '#27694D' : '#F4E4B5' }}>
+                                                {8 - row}
+                                            </span>
+                                        )}
+                                        {row === ranks[7] && (
+                                            <span className="board-coord" style={{ bottom: 1, right: 3, color: light ? '#27694D' : '#F4E4B5' }}>
+                                                {fnames[col]}
+                                            </span>
+                                        )}
                                         {isLegal && !piece && (
                                             <div style={{ width: '32%', height: '32%', borderRadius: '50%', background: 'rgba(0,0,0,.18)', pointerEvents: 'none' }} />
                                         )}
@@ -529,14 +530,6 @@ export default function GameScreen({
                             }))}
                         </div>
 
-                    </div>
-                    {/* File labels bottom */}
-                    <div style={{ display: 'flex', paddingLeft: 16, width: `calc(8 * ${SQ} + 16px)` }}>
-                        {files.map(c => (
-                            <div key={c} style={{ flex: 1, textAlign: 'center', color: '#6b6560', fontSize: 10, fontWeight: 500, paddingTop: 3 }}>
-                                {fnames[c]}
-                            </div>
-                        ))}
                     </div>
 
                     {/* ── Draw Offer UI (Below Board) ── */}

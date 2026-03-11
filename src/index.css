@@ -409,6 +409,15 @@ body {
     animation: fadein .2s ease;
 }
 
+.board-coord {
+    position: absolute;
+    font-size: 12px;
+    font-weight: 700;
+    user-select: none;
+    pointer-events: none;
+    z-index: 1;
+}
+
 /* ── MOBILE RESPONSIVE ─────────────────────────────────────────────────── */
 /* Game layout: desktop = 3-col row, mobile = single column */
 .game-layout {
@@ -582,11 +591,19 @@ body {
         font-size: 18px;
         padding: 10px 12px;
     }
+
+    .board-coord {
+        font-size: 10px;
+    }
 }
 
 @media(max-width:400px) {
     .pbtn {
         font-size: 36px;
         padding: 6px 8px;
+    }
+
+    .board-coord {
+        font-size: 9px;
     }
 }
