@@ -27,6 +27,10 @@ dist-ssr
 __pycache__/
 *.pyc
 
+# Stockfish binaries (too large for GitHub, use CDN or npm package)
+public/stockfish.js
+public/stockfish.wasm
+
 # Environment secrets — never commit
 .env
 backend/.env
