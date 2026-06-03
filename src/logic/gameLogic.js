@@ -127,6 +127,71 @@ export function pseudoMoves(board, r, c, cr, ep) {
     return moves
 }
 
+// Like pseudoMoves but allows targeting own non-king pieces (for premoves).
+// Premoves fire only when legal at execution time, so we let the player
+// pre-aim at their own piece square (e.g., Queen → Knight square) anticipating
+// the opponent will capture that piece first.
+export function premovePseudoMoves(board, r, c, cr, ep) {
+    const piece = board[r][c]; if (!piece) return []
+    const color = pc(piece), type = pt(piece)
+    const moves = []
+    // canLand: any square that isn't our own King
+    const canLand = (nr, nc) => {
+        const t = board[nr][nc]
+        return !t || pc(t) !== color || pt(t) !== 'K'
+    }
+    const slide = dirs => {
+        for (const [dr, dc] of dirs) {
+            let nr = r + dr, nc = c + dc
+            while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                const t = board[nr][nc]
+                if (!t) { moves.push([nr, nc]) }
+                else {
+                    // own King — stop, don't add
+                    if (pc(t) === color && pt(t) === 'K') break
+                    // own non-king — add then stop (might be taken)
+                    moves.push([nr, nc]); break
+                }
+                nr += dr; nc += dc
+            }
+        }
+    }
+    const step = dirs => {
+        for (const [dr, dc] of dirs) {
+            const nr = r + dr, nc = c + dc
+            if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && canLand(nr, nc))
+                moves.push([nr, nc])
+        }
+    }
+    switch (type) {
+        case 'P': {
+            const d = color === 'w' ? -1 : 1, sr = color === 'w' ? 6 : 1
+            // Forward moves (only if empty — same as normal)
+            if (r + d >= 0 && r + d < 8 && !board[r + d][c]) {
+                moves.push([r + d, c])
+                if (r === sr && !board[r + 2 * d][c]) moves.push([r + 2 * d, c])
+            }
+            // Diagonal: allow targeting own non-king pieces too (may be captured)
+            for (const dc of [-1, 1]) {
+                const nr = r + d, nc = c + dc
+                if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                    const t = board[nr][nc]
+                    // Allow if: opponent piece, own non-king piece, or en-passant square
+                    if (t && pc(t) === color && pt(t) === 'K') continue  // skip own king
+                    if (t || (ep && nr === ep[0] && nc === ep[1])) moves.push([nr, nc])
+                }
+            }
+            break
+        }
+        case 'N': step([[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]]); break
+        case 'B': slide([[-1, -1], [-1, 1], [1, -1], [1, 1]]); break
+        case 'R': slide([[-1, 0], [1, 0], [0, -1], [0, 1]]); break
+        case 'Q': slide([[-1, -1], [-1, 1], [1, -1], [1, 1], [-1, 0], [1, 0], [0, -1], [0, 1]]); break
+        case 'K': step([[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]]); break
+    }
+    return moves
+}
+
 export function legalMoves(board, r, c, cr, ep) {
     const piece = board[r][c]; if (!piece) return []
     const color = pc(piece), type = pt(piece)

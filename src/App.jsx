@@ -4,7 +4,7 @@ import { ref, set, onValue, off, get, push, update } from 'firebase/database'
 
 import {
     GLYPHS, pieceImg, pc, pt,
-    inCheck, legalMoves, hasLegal, applyMove, toAlg, genCode,
+    inCheck, legalMoves, pseudoMoves, premovePseudoMoves, hasLegal, applyMove, toAlg, genCode,
     TIME_CONTROLS, fmtTime,
     encodeGs, decodeGs, FRESH_STATE
 } from './logic/gameLogic.js'
@@ -12,6 +12,7 @@ import {
 import LobbyScreen from './components/LobbyScreen.jsx';
 import WaitingScreen from './components/WaitingScreen.jsx';
 import GameScreen from './components/GameScreen.jsx';
+import AnalysisScreen from './components/AnalysisScreen.jsx';
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 
@@ -34,8 +35,18 @@ let serverOffset = 0
 const getNow = () => Date.now() + serverOffset
 
 export default function App() {
-    // Screens: 'lobby' | 'color-pick' | 'waiting' | 'game'
+    // Screens: 'lobby' | 'color-pick' | 'waiting' | 'game' | 'analysis'
     const [screen, setScreen] = useState('lobby')
+    const [analysisHistory, setAnalysisHistory] = useState(null)
+    const [analysisMyColor, setAnalysisMyColor] = useState(null)
+    const [analysisResult, setAnalysisResult] = useState(null)
+
+    // ── Premove state ─────────────────────────────────────────────────────────
+    const [premoveEnabled, setPremoveEnabled] = useState(true)
+    const [premoveMode, setPremoveMode] = useState('single')   // 'single' | 'multiple'
+    const [premoveQueue, setPremoveQueue] = useState([])       // [{fr,fc,tr,tc,promo}]
+    const premoveQueueRef = useRef([])
+    const premoveModeRef = useRef('single')
     const [myColor, setMyColor] = useState(null)   // 'w' | 'b'
     const [pickedColor, setPickedColor] = useState('w') // color selection UI
     const [pickedTime, setPickedTime] = useState('blitz') // 'bullet'|'blitz'|'rapid'
@@ -66,6 +77,7 @@ export default function App() {
     const seqRef = useRef(0)
     const listenerRef = useRef(null)
     const histRef = useRef(null)
+    const premoveFiredSeqRef = useRef(-1)
 
     // ── Chat state ────────────────────────────────────────────────────────────
     const [chatMessages, setChatMessages] = useState([])  // [{ id, sender:'me'|'opp', text, ts }]
@@ -78,6 +90,12 @@ export default function App() {
 
     // Keep gsRef always fresh for use inside timer interval
     useEffect(() => { gsRef.current = gs }, [gs])
+
+    // Keep premoveQueueRef and premoveModeRef always fresh — sync immediately on every render too
+    premoveQueueRef.current = premoveQueue
+    premoveModeRef.current = premoveMode
+
+
 
     useEffect(() => {
         const offsetRef = ref(db, '.info/serverTimeOffset')
@@ -131,6 +149,85 @@ export default function App() {
         if (histRef.current) histRef.current.scrollTop = histRef.current.scrollHeight
     }, [gs.history])
 
+    // ── Premove execution effect ───────────────────────────────────────────────
+    // Fires whenever gs.seq changes (any move lands). Executes queued premoves
+    // if it's our turn. Using a useEffect (instead of inline in the Firebase
+    // callback) means premoves fire correctly even if they were queued after
+    // the Firebase callback already ran.
+    useEffect(() => {
+        // Guard: only fire once per seq, and only when it's our turn
+        if (premoveFiredSeqRef.current === gs.seq) return
+        if (premoveQueueRef.current.length === 0) return
+        if (gs.turn !== myColorRef.current) return
+        if (gs.status !== 'playing' && gs.status !== 'check') return
+
+        premoveFiredSeqRef.current = gs.seq  // mark this seq as handled
+
+        let currentGs = gs
+        let remainingQueue = [...premoveQueueRef.current]
+        let executedCount = 0
+
+        while (remainingQueue.length > 0) {
+            const next = remainingQueue[0]
+            if (currentGs.turn !== myColorRef.current) break
+            if (currentGs.status !== 'playing' && currentGs.status !== 'check') break
+
+            const legal = legalMoves(currentGs.board, next.fr, next.fc, currentGs.cr, currentGs.ep)
+            const isLegal = legal.some(([r, c]) => r === next.tr && c === next.tc)
+            if (!isLegal) { remainingQueue = []; break }
+
+            const { nb, newCR, newEP, cap } = applyMove(
+                currentGs.board, next.fr, next.fc, next.tr, next.tc, next.promo, currentGs.cr, currentGs.ep
+            )
+            const note = toAlg(currentGs.board, next.fr, next.fc, next.tr, next.tc, next.promo)
+            const nextTurn = currentGs.turn === 'w' ? 'b' : 'w'
+            const newCap = { w: [...currentGs.captured.w], b: [...currentGs.captured.b] }
+            if (cap) newCap[currentGs.turn].push(cap)
+            const isChk = inCheck(nb, nextTurn)
+            const hasL = hasLegal(nb, nextTurn, newCR, newEP)
+            let ns = 'playing'
+            if (!hasL) ns = isChk ? 'checkmate' : 'stalemate'
+            else if (isChk) ns = 'check'
+            const finalNote = note + (ns === 'checkmate' ? '#' : ns === 'check' ? '+' : '')
+            const newSeq2 = (currentGs.seq || 0) + 1
+            const now = getNow()
+            let newTimeW = currentGs.timeW, newTimeB = currentGs.timeB
+            if (currentGs.timeW != null && currentGs.lastMoveTs) {
+                const elapsed = (now - currentGs.lastMoveTs) / 1000
+                if (currentGs.turn === 'w') newTimeW = Math.max(0, currentGs.timeW - elapsed)
+                else newTimeB = Math.max(0, currentGs.timeB - elapsed)
+            }
+            currentGs = {
+                board: nb, turn: nextTurn, cr: newCR, ep: newEP, status: ns,
+                history: [...currentGs.history, { n: finalNote, color: currentGs.turn }],
+                captured: newCap,
+                lastMove: { fr: next.fr, fc: next.fc, tr: next.tr, tc: next.tc },
+                winner: ns === 'checkmate' ? currentGs.turn : null,
+                seq: newSeq2, rematchReq: null, drawOffer: null,
+                timeW: newTimeW, timeB: newTimeB,
+                lastMoveTs: ns === 'playing' || ns === 'check' ? now : null,
+                timeControl: currentGs.timeControl,
+            }
+            seqRef.current = newSeq2
+            remainingQueue = premoveModeRef.current === 'multiple' ? remainingQueue.slice(1) : []
+            executedCount++
+            if (premoveModeRef.current === 'single') break
+        }
+
+        if (executedCount > 0) {
+            premoveQueueRef.current = remainingQueue
+            setPremoveQueue(remainingQueue)
+            setGs(currentGs); setSel(null); setLm([]); setPromo(null)
+            update(ref(db, 'rooms/' + roomRef.current), encodeGs(currentGs, {
+                hostColor: hostColorRef.current, guestJoined: true,
+            }))
+        } else {
+            premoveQueueRef.current = []
+            setPremoveQueue([])
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [gs.seq, premoveQueue.length])
+
     // ── Timeout handler ───────────────────────────────────────────────────
     const handleTimeout = useCallback((losingColor) => {
         const cur = gsRef.current
@@ -169,14 +266,17 @@ export default function App() {
             // Sync game state when a move happens (seq changes)
             if (typeof d.seq === 'number' && d.seq !== seqRef.current) {
                 seqRef.current = d.seq
-                setGs(decodeGs(d))
+                const newGs = decodeGs(d)
+
+                // No premove block here — handled by the premove useEffect below
+                setGs(newGs)
                 setSel(null); setLm([]); setPromo(null)
             } else {
                 // Even without a seq change, sync rematchReq and drawOffer
                 const incoming = d.rematchReq || null
                 const incomingDraw = d.drawOffer || null
                 setGs(prev => {
-                    if (prev.rematchReq === incoming && prev.drawOffer === incomingDraw) return prev  // no-op if unchanged
+                    if (prev.rematchReq === incoming && prev.drawOffer === incomingDraw) return prev
                     return { ...prev, rematchReq: incoming, drawOffer: incomingDraw }
                 })
             }
@@ -342,11 +442,58 @@ export default function App() {
     const handleClick = useCallback((row, col) => {
         if (
             gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement' || gs.status === 'resigned' ||
-            promo || gs.turn !== myColorRef.current
+            promo
         ) return
-        // Ignore clicks that ended a drag
         if (dragStateRef.current?._wasDrag) { dragStateRef.current._wasDrag = false; return }
+
+        const isMyTurn = gs.turn === myColorRef.current
         const piece = gs.board[row][col]
+
+        // ── Build virtual board applying all queued premoves ──────────────────
+        const buildVirtualBoard = (queue) => {
+            let vb = gs.board.map(r => [...r])
+            for (const pm of queue) {
+                const p = vb[pm.fr][pm.fc]
+                if (p) { vb[pm.tr][pm.tc] = p; vb[pm.fr][pm.fc] = null }
+            }
+            return vb
+        }
+
+        // ── Premove queuing (opponent's turn) ─────────────────────────────────
+        if (!isMyTurn) {
+            if (!premoveEnabled) return
+            const queue = premoveQueueRef.current
+            const vBoard = buildVirtualBoard(queue)
+            const vPiece = vBoard[row][col]
+
+            if (sel) {
+                const [sr, sc] = sel
+                const selPiece = vBoard[sr][sc]
+                if (!selPiece || pc(selPiece) !== myColorRef.current) { setSel(null); setLm([]); return }
+                const pMoves = premovePseudoMoves(vBoard, sr, sc, gs.cr, gs.ep)
+                const isValid = pMoves.some(([r, c]) => r === row && c === col)
+                if (isValid) {
+                    const newPremove = { fr: sr, fc: sc, tr: row, tc: col, promo: null }
+                    const newQueue = premoveModeRef.current === 'single'
+                        ? [newPremove]
+                        : [...premoveQueueRef.current, newPremove]
+                    premoveQueueRef.current = newQueue  // sync immediately — Firebase may fire before next render
+                    setPremoveQueue(newQueue)
+                    setSel(null); setLm([])
+                } else if (vPiece && pc(vPiece) === myColorRef.current) {
+                    setSel([row, col])
+                    setLm(premovePseudoMoves(vBoard, row, col, gs.cr, gs.ep))
+                } else { setSel(null); setLm([]) }
+            } else {
+                if (vPiece && pc(vPiece) === myColorRef.current) {
+                    setSel([row, col])
+                    setLm(premovePseudoMoves(vBoard, row, col, gs.cr, gs.ep))
+                }
+            }
+            return
+        }
+
+        // ── Normal move (my turn) ─────────────────────────────────────────────
         if (sel) {
             const [sr, sc] = sel
             const legal = lm.some(([r, c]) => r === row && c === col)
@@ -366,7 +513,7 @@ export default function App() {
                 setSel([row, col]); setLm(legalMoves(gs.board, row, col, gs.cr, gs.ep))
             }
         }
-    }, [gs, sel, lm, execMove, promo])
+    }, [gs, sel, lm, execMove, promo, premoveEnabled, premoveMode])
 
     // ── Drag handlers ─────────────────────────────────────────────────────────
     // Convert pixel position to board [row, col], accounting for board flip
@@ -390,14 +537,30 @@ export default function App() {
         if (gs.status === 'checkmate' || gs.status === 'stalemate' || gs.status === 'draw_agreement' || gs.status === 'resigned') return
         if (promo) return
         if (pc(piece) !== myColorRef.current) return
-        if (gs.turn !== myColorRef.current) return
+
+        const isMyTurn = gs.turn === myColorRef.current
+        // Allow drag during opponent's turn only if premove is enabled
+        if (!isMyTurn && !premoveEnabled) return
+
         e.preventDefault()
         e.stopPropagation()
 
-        const moves = legalMoves(gs.board, row, col, gs.cr, gs.ep)
-        dragStateRef.current = { fr: row, fc: col, piece, legalSquares: moves, _wasDrag: false, _moved: false }
+        // Use virtual board (after queued premoves) for calculating pseudo moves
+        const vBoard = (() => {
+            let vb = gs.board.map(r => [...r])
+            for (const pm of premoveQueueRef.current) {
+                const p = vb[pm.fr][pm.fc]
+                if (p) { vb[pm.tr][pm.tc] = p; vb[pm.fr][pm.fc] = null }
+            }
+            return vb
+        })()
 
-        // Show selection + legal moves immediately
+        const moves = isMyTurn
+            ? legalMoves(gs.board, row, col, gs.cr, gs.ep)
+            : premovePseudoMoves(vBoard, row, col, gs.cr, gs.ep)
+
+        dragStateRef.current = { fr: row, fc: col, piece, legalSquares: moves, _wasDrag: false, _moved: false, isMyTurn }
+
         setSel([row, col])
         setLm(moves)
         const startX = e.touches ? e.touches[0].clientX : e.clientX
@@ -430,39 +593,49 @@ export default function App() {
             setDragOver(null)
 
             const ds = dragStateRef.current
-            if (!ds || !ds._moved) {
-                // Treat as a regular click — keep selection
-                return
-            }
-            dragStateRef.current._wasDrag = true
+            if (!ds || !ds._moved) return
 
+            dragStateRef.current._wasDrag = true
             const { x, y } = getXY(me)
             const sq = pixelToSquare(x, y)
-            if (!sq) { /* dropped off board — keep selection */ return }
+            if (!sq) return
             const [tr, tc] = sq
             const { fr, fc, legalSquares } = ds
-            const isLegal = legalSquares.some(([r, c]) => r === tr && c === tc)
-            if (isLegal) {
-                const gsSnapshot = ds._gsSnapshot
-                if (pt(piece) === 'P' && (tr === 0 || tr === 7)) {
-                    setPromo({ fr, fc, tr, tc })
-                    setSel(null); setLm([])
-                } else {
-                    execMove(fr, fc, tr, tc, null, gsSnapshot)
+            const isValid = legalSquares.some(([r, c]) => r === tr && c === tc)
+
+            if (!ds.isMyTurn) {
+                // Queue premove
+                if (isValid) {
+                    const newPremove = { fr, fc, tr, tc, promo: null }
+                    const newQueue = premoveModeRef.current === 'single'
+                        ? [newPremove]
+                        : [...premoveQueueRef.current, newPremove]
+                    premoveQueueRef.current = newQueue  // sync immediately — Firebase may fire before next render
+                    setPremoveQueue(newQueue)
                 }
-            } else {
                 setSel(null); setLm([])
+            } else {
+                // Execute normal move
+                if (isValid) {
+                    const gsSnapshot = ds._gsSnapshot
+                    if (pt(piece) === 'P' && (tr === 0 || tr === 7)) {
+                        setPromo({ fr, fc, tr, tc })
+                        setSel(null); setLm([])
+                    } else {
+                        execMove(fr, fc, tr, tc, null, gsSnapshot)
+                    }
+                } else {
+                    setSel(null); setLm([])
+                }
             }
         }
 
-        // Snapshot the current gs for use in onUp closure
         dragStateRef.current._gsSnapshot = gs
-
         document.addEventListener('mousemove', onMove)
         document.addEventListener('mouseup', onUp)
         document.addEventListener('touchmove', onMove, { passive: false })
         document.addEventListener('touchend', onUp)
-    }, [gs, promo, execMove, pixelToSquare])
+    }, [gs, promo, execMove, pixelToSquare, premoveEnabled, premoveMode])
 
     const handlePromo = useCallback(t => {
         if (!promo) return
@@ -550,6 +723,26 @@ export default function App() {
         leaveGame()
     }
 
+    // ── Open Analysis ─────────────────────────────────────────────────────────
+    const openAnalysis = useCallback(() => {
+    const cur = gsRef.current
+    let result = 'Unknown'
+    if (cur.winner === 'w')      result = 'White wins'
+    else if (cur.winner === 'b') result = 'Black wins'
+    else if (cur.status === 'stalemate' || cur.status === 'draw_agreement') result = 'Draw'
+    setAnalysisHistory([...cur.history])
+    setAnalysisMyColor(myColorRef.current)
+    setAnalysisResult(result)
+    setScreen('analysis')
+    }, [])
+
+    // ── Cancel premoves ───────────────────────────────────────────────────────
+    const cancelPremoves = useCallback(() => {
+        premoveQueueRef.current = []  // sync immediately
+        setPremoveQueue([])
+        setSel(null); setLm([])
+    }, [])
+
     // ── Leave game ────────────────────────────────────────────────────────────
     const leaveGame = () => {
         unsubscribe()
@@ -562,6 +755,7 @@ export default function App() {
         setSel(null); setLm([]); setPromo(null)
         setDispTimeW(null); setDispTimeB(null)
         setChatMessages([]); setChatInput(''); setActiveTab('moves'); setChatUnread(0)
+        setPremoveQueue([])
     }
 
     const copyCode = () => {
@@ -570,6 +764,16 @@ export default function App() {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
+    // ── ANALYSIS SCREEN ───────────────────────────────────────────────────────
+    if (screen === 'analysis') return (
+    <AnalysisScreen
+        history={analysisHistory || []}
+        myColor={analysisMyColor}
+        result={analysisResult}
+        onBack={() => setScreen('game')}
+    />
+    )
+
     // ── LOBBY SCREEN ─────────────────────────────────────────────────────────
     // ══════════════════════════════════════════════════════════════════════════
     if (screen === 'lobby') return (
@@ -624,6 +828,10 @@ export default function App() {
             requestRematch={requestRematch} acceptRematch={acceptRematch} rejectRematch={rejectRematch}
             offerDraw={offerDraw} acceptDraw={acceptDraw} rejectDraw={rejectDraw}
             leaveGame={leaveGame} resignGame={resignGame}
+            openAnalysis={openAnalysis}
+            premoveEnabled={premoveEnabled} setPremoveEnabled={setPremoveEnabled}
+            premoveMode={premoveMode} setPremoveMode={setPremoveMode}
+            premoveQueue={premoveQueue} cancelPremoves={cancelPremoves}
             sel={sel} lm={lm}
         />
     )

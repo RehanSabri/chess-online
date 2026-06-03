@@ -12,6 +12,10 @@ export default function GameScreen({
     handleClick, handlePieceMouseDown, handlePromo,
     requestRematch, acceptRematch, rejectRematch, leaveGame, resignGame,
     offerDraw, acceptDraw, rejectDraw,
+    openAnalysis,
+    premoveEnabled, setPremoveEnabled,
+    premoveMode, setPremoveMode,
+    premoveQueue, cancelPremoves,
     sel, lm
 }) {
     const oppColor = myColor === 'w' ? 'b' : 'w'
@@ -305,11 +309,27 @@ export default function GameScreen({
                                     borderRadius: 8, color: '#6b6560',
                                     fontSize: 13, fontWeight: 500, cursor: 'pointer',
                                     transition: 'border-color .15s, color .15s',
+                                    marginBottom: 8,
                                 }}
                                 onMouseEnter={e => { e.currentTarget.style.borderColor = '#6b6560'; e.currentTarget.style.color = '#b0a89e' }}
                                 onMouseLeave={e => { e.currentTarget.style.borderColor = '#3a3631'; e.currentTarget.style.color = '#6b6560' }}
                             >
                                 ← Leave Game
+                            </button>
+                            <button
+                                onClick={openAnalysis}
+                                style={{
+                                    width: '100%', padding: '11px 0',
+                                    background: 'transparent',
+                                    border: '1.5px solid #4a7c9e',
+                                    borderRadius: 8, color: '#6aabcf',
+                                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                                    transition: 'background .15s, border-color .15s',
+                                }}
+                                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(106,171,207,.1)'; e.currentTarget.style.borderColor = '#6aabcf' }}
+                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = '#4a7c9e' }}
+                            >
+                                🔍 Analyse Game
                             </button>
                         </div>
                     </div>
@@ -427,6 +447,75 @@ export default function GameScreen({
                     })()}
 
                     <div style={{ flex: 1 }} />
+
+                    {/* ── Premove settings ────────────────────────────────── */}
+                    {(gs.status === 'playing' || gs.status === 'check') && (
+                        <div style={{ background: '#1a1715', border: '1px solid #302c29', borderRadius: 8, padding: '8px 10px', marginBottom: 6 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                                <span style={{ color: '#6b6560', fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Premove</span>
+                                {/* Toggle on/off */}
+                                <div
+                                    onClick={() => setPremoveEnabled(v => !v)}
+                                    style={{
+                                        width: 28, height: 15, borderRadius: 8,
+                                        background: premoveEnabled ? '#81b64c' : '#3a3631',
+                                        position: 'relative', cursor: 'pointer',
+                                        transition: 'background .2s', flexShrink: 0,
+                                    }}
+                                >
+                                    <div style={{
+                                        position: 'absolute', top: 2,
+                                        left: premoveEnabled ? 15 : 2,
+                                        width: 11, height: 11, borderRadius: '50%',
+                                        background: '#e8e0d5',
+                                        transition: 'left .2s',
+                                    }} />
+                                </div>
+                            </div>
+                            {/* Single / Multiple toggle */}
+                            {premoveEnabled && (
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                    <button
+                                        onClick={() => setPremoveMode('single')}
+                                        style={{
+                                            flex: 1, padding: '4px 0', fontSize: 10, fontWeight: 600,
+                                            border: 'none', borderRadius: 4, cursor: 'pointer',
+                                            background: premoveMode === 'single' ? '#81b64c' : '#2a2520',
+                                            color: premoveMode === 'single' ? '#fff' : '#6b6560',
+                                            transition: 'background .15s, color .15s',
+                                        }}
+                                    >Single</button>
+                                    <button
+                                        onClick={() => setPremoveMode('multiple')}
+                                        style={{
+                                            flex: 1, padding: '4px 0', fontSize: 10, fontWeight: 600,
+                                            border: 'none', borderRadius: 4, cursor: 'pointer',
+                                            background: premoveMode === 'multiple' ? '#81b64c' : '#2a2520',
+                                            color: premoveMode === 'multiple' ? '#fff' : '#6b6560',
+                                            transition: 'background .15s, color .15s',
+                                        }}
+                                    >Multi</button>
+                                </div>
+                            )}
+                            {/* Queued premove count + cancel */}
+                            {premoveEnabled && premoveQueue && premoveQueue.length > 0 && (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 5 }}>
+                                    <span style={{ color: '#e05c5c', fontSize: 10, fontWeight: 600 }}>
+                                        ⏳ {premoveQueue.length} queued
+                                    </span>
+                                    <button
+                                        onClick={cancelPremoves}
+                                        style={{
+                                            background: 'transparent', border: '1px solid #e05c5c',
+                                            borderRadius: 4, padding: '2px 6px',
+                                            color: '#e05c5c', fontSize: 9, cursor: 'pointer', fontWeight: 600,
+                                        }}
+                                    >✕ Cancel</button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {(gs.status === 'playing' || gs.status === 'check') && !gs.drawOffer && (
                         <button className="btn-ghost" style={{ marginBottom: 8 }} onClick={offerDraw}>
                             ½ Offer Draw
@@ -475,69 +564,95 @@ export default function GameScreen({
                             ref={boardRef}
                             style={{ display: 'grid', gridTemplateColumns: `repeat(8, ${SQ})`, gridTemplateRows: `repeat(8, ${SQ})`, borderRadius: 4, boxShadow: '0 8px 40px rgba(0,0,0,.7)', overflow: 'hidden' }}
                         >
-                            {ranks.flatMap(row => files.map(col => {
-                                const light = (row + col) % 2 === 0
-                                const isSel = sel && sel[0] === row && sel[1] === col
-                                const isLegal = lm.some(([r, c]) => r === row && c === col)
-                                const isLast = gs.lastMove && (
-                                    (gs.lastMove.fr === row && gs.lastMove.fc === col) ||
-                                    (gs.lastMove.tr === row && gs.lastMove.tc === col)
+                            {(() => {
+                                // Build virtual board by applying all queued premoves in order
+                                const vBoard = gs.board.map(r => [...r])
+                                if (premoveQueue && premoveQueue.length > 0) {
+                                    for (const pm of premoveQueue) {
+                                        const p = vBoard[pm.fr][pm.fc]
+                                        if (p) { vBoard[pm.tr][pm.tc] = p; vBoard[pm.fr][pm.fc] = null }
+                                    }
+                                }
+                                // Which squares are premove targets (for red highlight)
+                                const premoveToSquares = new Set(
+                                    (premoveQueue || []).map(p => `${p.tr},${p.tc}`)
                                 )
-                                const isDragTarget = dragOver && dragOver[0] === row && dragOver[1] === col && isLegal
-                                const piece = gs.board[row][col]
-                                const isCheckKing = gs.status === 'check' && piece && piece === gs.turn + 'K'
-                                const isDragging = dragGhost && isSel
-                                // chess.com board colors
-                                let bg = light ? '#F4E4B5' : '#27694D'
-                                if (isSel) bg = light ? '#f6f669' : '#caca3a'
-                                else if (isLast) bg = light ? '#cdd16a' : '#aaa23a'
-                                if (isCheckKing) bg = '#e84040'
-                                if (isDragTarget) bg = light ? '#b9df6a' : '#8fb93a'
-                                return (
-                                    <div
-                                        key={`${row}-${col}`}
-                                        className={`sq${isDragTarget ? ' drag-over' : ''}`}
-                                        onClick={() => handleClick(row, col)}
-                                        style={{ width: SQ, height: SQ, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: piece && pc(piece) === myColor && gs.turn === myColor ? 'grab' : 'pointer' }}
-                                    >
-                                        {col === files[0] && (
-                                            <span className="board-coord" style={{ top: 2, left: 4, color: light ? '#27694D' : '#F4E4B5' }}>
-                                                {8 - row}
-                                            </span>
-                                        )}
-                                        {row === ranks[7] && (
-                                            <span className="board-coord" style={{ bottom: 1, right: 3, color: light ? '#27694D' : '#F4E4B5' }}>
-                                                {fnames[col]}
-                                            </span>
-                                        )}
-                                        {isLegal && !piece && (
-                                            <div style={{ width: '32%', height: '32%', borderRadius: '50%', background: 'rgba(0,0,0,.18)', pointerEvents: 'none' }} />
-                                        )}
-                                        {isLegal && piece && isLegal && (
-                                            <div style={{ position: 'absolute', inset: 0, boxShadow: 'inset 0 0 0 4px rgba(0,0,0,.28)', pointerEvents: 'none', zIndex: 1 }} />
-                                        )}
-                                        {piece && (
-                                            <img
-                                                src={pieceImg(piece)}
-                                                alt={piece}
-                                                onMouseDown={pc(piece) === myColor && gs.turn === myColor ? (e) => handlePieceMouseDown(e, row, col, piece) : undefined}
-                                                onTouchStart={pc(piece) === myColor && gs.turn === myColor ? (e) => handlePieceMouseDown(e, row, col, piece) : undefined}
-                                                style={{
-                                                    width: '82%', height: '82%', objectFit: 'contain', zIndex: 2,
-                                                    filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.4))',
-                                                    opacity: isDragging ? 0.25 : 1,
-                                                    cursor: pc(piece) === myColor && gs.turn === myColor ? 'grab' : 'default',
-                                                    userSelect: 'none',
-                                                    WebkitUserDrag: 'none',
-                                                    transition: 'opacity .1s',
-                                                }}
-                                                draggable={false}
-                                            />
-                                        )}
-                                    </div>
-                                )
-                            }))}
-                        </div>
+
+                                return ranks.flatMap(row => files.map(col => {
+                                    const light = (row + col) % 2 === 0
+                                    const isSel = sel && sel[0] === row && sel[1] === col
+                                    const isLegal = lm.some(([r, c]) => r === row && c === col)
+                                    const isLast = gs.lastMove && (
+                                        (gs.lastMove.fr === row && gs.lastMove.fc === col) ||
+                                        (gs.lastMove.tr === row && gs.lastMove.tc === col)
+                                    )
+                                    const isDragTarget = dragOver && dragOver[0] === row && dragOver[1] === col && isLegal
+                                    const piece = gs.board[row][col]       // real board piece
+                                    const vPiece = vBoard[row][col]        // virtual board piece (after premoves)
+                                    const isCheckKing = gs.status === 'check' && piece && piece === gs.turn + 'K'
+                                    const isDragging = dragGhost && isSel
+                                    const isPremoveTo = premoveToSquares.has(`${row},${col}`)
+                                    // Ghost = something on virtual board that isn't on real board
+                                    const ghostPiece = (vPiece && vPiece !== piece) ? vPiece : null
+
+                                    let bg = light ? '#F4E4B5' : '#27694D'
+                                    if (isSel) bg = light ? '#f6f669' : '#caca3a'
+                                    else if (isLast) bg = light ? '#cdd16a' : '#aaa23a'
+                                    if (isCheckKing) bg = '#e84040'
+                                    if (isDragTarget) bg = light ? '#b9df6a' : '#8fb93a'
+                                    if (isPremoveTo) bg = light ? '#ff6b6b' : '#cc2222'
+
+                                    // Can drag if this square has my piece (real or virtual)
+                                    const myPiece = vPiece && pc(vPiece) === myColor
+                                    const canDrag = myPiece && (gs.turn === myColor || premoveEnabled)
+                                    const dragPiece = vPiece  // drag the virtual piece
+
+                                    return (
+                                        <div
+                                            key={`${row}-${col}`}
+                                            className={`sq${isDragTarget ? ' drag-over' : ''}`}
+                                            onClick={() => handleClick(row, col)}
+                                            onContextMenu={e => { e.preventDefault(); cancelPremoves() }}
+                                            style={{ width: SQ, height: SQ, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', cursor: canDrag ? 'grab' : 'pointer' }}
+                                        >
+                                            {col === files[0] && (
+                                                <span className="board-coord" style={{ top: 2, left: 4, color: light ? '#27694D' : '#F4E4B5' }}>
+                                                    {8 - row}
+                                                </span>
+                                            )}
+                                            {row === ranks[7] && (
+                                                <span className="board-coord" style={{ bottom: 1, right: 3, color: light ? '#27694D' : '#F4E4B5' }}>
+                                                    {fnames[col]}
+                                                </span>
+                                            )}
+                                            {isLegal && !vPiece && (
+                                                <div style={{ width: '32%', height: '32%', borderRadius: '50%', background: 'rgba(0,0,0,.18)', pointerEvents: 'none' }} />
+                                            )}
+                                            {isLegal && vPiece && (
+                                                <div style={{ position: 'absolute', inset: 0, boxShadow: 'inset 0 0 0 4px rgba(0,0,0,.28)', pointerEvents: 'none', zIndex: 1 }} />
+                                            )}
+                                            {/* Show virtual piece (handles both normal + ghost cases) */}
+                                            {vPiece && (
+                                                <img
+                                                    src={pieceImg(vPiece)}
+                                                    alt={vPiece}
+                                                    onMouseDown={canDrag ? (e) => handlePieceMouseDown(e, row, col, dragPiece) : undefined}
+                                                    onTouchStart={canDrag ? (e) => handlePieceMouseDown(e, row, col, dragPiece) : undefined}
+                                                    style={{
+                                                        width: '82%', height: '82%', objectFit: 'contain', zIndex: 2,
+                                                        filter: 'drop-shadow(0 1px 3px rgba(0,0,0,.4))',
+                                                        opacity: isDragging ? 0.25 : 1,
+                                                        cursor: canDrag ? 'grab' : 'default',
+                                                        userSelect: 'none', WebkitUserDrag: 'none',
+                                                        transition: 'opacity .1s',
+                                                    }}
+                                                    draggable={false}
+                                                />
+                                            )}
+                                        </div>
+                                    )
+                                }))
+                            })()}                        </div>
 
                     </div>
 
